@@ -53,6 +53,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
       let count1Element = document.getElementById("count1");
       let count2Element = document.getElementById("count2");
+      let chartwo = document.getElementById("chart2");
+      let chartone = document.getElementById("chart");
 
       // Attach an event listener to the 'counter' element
       counter.addEventListener("click", function () {
@@ -60,8 +62,28 @@ document.addEventListener("DOMContentLoaded", function () {
         // and toggle their display property between 'none' and 'block'
         count1Element.style.display =
           count1Element.style.display === "none" ? "block" : "none";
+
         count2Element.style.display =
           count2Element.style.display === "block" ? "none" : "block";
+      });
+
+      let title1 = document.getElementById("title1");
+      let title2 = document.getElementById("title2");
+      let modes = document.getElementById("modes");
+
+      // Attach an event listener to the 'counter' element
+      modes.addEventListener("click", function () {
+        // Check the current display property of 'count1' and 'count2'
+        // and toggle their display property between 'none' and 'block'
+        title1.style.display =
+          title1.style.display === "none" ? "block" : "none";
+        chartwo.style.display =
+          chartwo.style.display === "none" ? "block" : "none";
+
+        title2.style.display =
+          title2.style.display === "block" ? "none" : "block";
+        chartone.style.display =
+          chartone.style.display === "grid" ? "none" : "grid";
       });
 
       //load the data
