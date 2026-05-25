@@ -3,43 +3,1099 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A lifelong journey to see all 250 artworks from the AP Art History curriculum in person."
+    />
     <title>APAH 250 Hunt</title>
-    <link rel="stylesheet" href="style.css" />
-    <script src="script.js" type="text/javascript"></script>
+    <link rel="preconnect" href="https://opensheet.elk.sh" />
+    <style>
+      :root {
+        --max-width: 1400px;
+        --page-pad-x: clamp(96px, 7vw, 160px);
+        --text-color: #111;
+        --link-color: #111;
+        --muted: #555;
+        --placeholder-bg: #f4f4f1;
+        --focus-ring: #4a90e2;
+      }
+      * { box-sizing: border-box; }
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        margin: 0;
+        padding: 0 var(--page-pad-x);
+        font-family: "Times New Roman", Times, serif;
+        color: var(--text-color);
+        line-height: 1.5;
+        background: #fff;
+      }
+      body.modal-open { overflow: hidden; }
+      main { max-width: var(--max-width); margin: 0 auto; }
+      a { color: var(--link-color); }
+      img { max-width: 100%; height: auto; display: block; }
+
+      #title {
+        padding-top: clamp(2rem, 5vw, 4rem);
+        padding-bottom: clamp(1rem, 2.5vw, 2rem);
+      }
+      #title h1 {
+        font-size: clamp(1.75rem, 4vw, 2.75rem);
+        margin: 0 0 1rem;
+        max-width: 1040px;
+      }
+      #title p {
+        font-size: clamp(0.95rem, 1.1vw, 1.05rem);
+        margin: 0 0 1rem;
+        max-width: 1040px;
+        text-wrap: pretty;
+      }
+      /* counter-wrap stays full width (no max-width) so the progress bar
+         spans the entire content area */
+      .dedication { padding-bottom: clamp(1rem, 2.5vw, 2rem); }
+      .loading { font-style: italic; color: var(--muted); margin: 0; }
+
+      .bar {
+        border: 1px solid black;
+        width: 100%;
+        height: clamp(1rem, 1.5vw, 1.5rem);
+        position: relative;
+        overflow: hidden;
+      }
+      .filledBar {
+        background-color: black;
+        height: 100%;
+        width: 0;
+        transition: width 0.8s ease-out;
+      }
+      .counter-line {
+        padding-top: 0.5rem;
+        font-size: clamp(1.1rem, 1.5vw, 1.5rem);
+        font-style: italic;
+      }
+      .counter-line .pct {
+        color: var(--muted);
+      }
+
+      /* --- Tabs (shaded toggle buttons) --- */
+      .tabs {
+        display: flex;
+        gap: 0.5rem;
+        margin: 0 0 clamp(1.75rem, 3vw, 2.75rem);
+      }
+      .tab {
+        font-family: inherit;
+        font-size: clamp(1.1rem, 1.5vw, 1.5rem);
+        font-weight: 600;
+        background: var(--placeholder-bg);
+        border: 0;
+        padding: 0.45rem 1.1rem;
+        margin: 0;
+        cursor: pointer;
+        color: #888;
+        font-style: normal;
+        border-radius: 8px;
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+      .tab:hover {
+        background: #e8e8e3;
+        color: #555;
+      }
+      .tab.is-active {
+        background: var(--text-color);
+        color: #fff;
+      }
+      .tab:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 3px;
+      }
+
+      /* --- Gallery view --- */
+      #chart {
+        display: none;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-auto-rows: auto;
+        column-gap: 2.5%;
+        row-gap: clamp(0.5rem, 1vw, 0.85rem);
+        padding-bottom: 2.5%;
+      }
+      .item {
+        display: grid;
+        grid-template-rows: subgrid;
+        grid-row: span 3;
+        background: none;
+        border: 0;
+        padding: 0;
+        margin: 0;
+        font: inherit;
+        color: inherit;
+        text-align: inherit;
+        cursor: pointer;
+      }
+      .item:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 4px;
+      }
+      .item:hover .artwork { opacity: 0.88; }
+      .details { width: 100%; text-align: center; padding-bottom: 0; }
+      .artwork-title {
+        font-size: clamp(0.95rem, 1.15vw, 1.15rem);
+        font-style: italic;
+        margin: 0 0 0.25rem;
+        font-weight: 600;
+        text-wrap: balance;
+      }
+      .item h3 {
+        font-size: clamp(0.75rem, 0.85vw, 0.9rem);
+        font-style: normal;
+        font-weight: 400;
+        color: var(--muted);
+        margin: 0;
+        text-wrap: balance;
+      }
+      .artwork {
+        width: 100%;
+        background: var(--placeholder-bg);
+        aspect-ratio: 3 / 4;
+        object-fit: cover;
+        transition: opacity 0.15s ease;
+      }
+      .artwork--missing { object-fit: contain; opacity: 0.85; }
+      .blurb {
+        font-size: clamp(0.8rem, 0.85vw, 0.95rem);
+        width: 100%;
+        margin: 0 0 clamp(1rem, 2vw, 1.75rem);
+        color: var(--muted);
+        text-align: center;
+      }
+
+      /* --- Overview view --- */
+      #chart2 { display: block; padding-bottom: 2.5%; }
+      .section-overview-title {
+        font-size: clamp(0.95rem, 1.25vw, 1.25rem);
+        margin: clamp(1.5rem, 2.5vw, 2rem) 0 clamp(1rem, 1.5vw, 1.25rem);
+        font-weight: 400;
+      }
+      .section-overview {
+        display: grid;
+        grid-template-columns: repeat(16, minmax(0, 1fr));
+        row-gap: clamp(0.5rem, 1.5vw, 1rem);
+        column-gap: 0.5%;
+        padding-bottom: 1rem;
+      }
+      .tile-button {
+        appearance: none;
+        background: none;
+        border: 0;
+        padding: 0;
+        margin: 0;
+        cursor: pointer;
+        display: block;
+        width: 100%;
+      }
+      .tile-button:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      .tile-button:hover .section-overview-image { opacity: 0.8; }
+      .section-overview-image {
+        width: 100%;
+        aspect-ratio: 3 / 4;
+        object-fit: cover;
+        background: var(--placeholder-bg);
+        overflow: hidden;
+        transition: opacity 0.15s ease;
+      }
+      .section-overview-image--missing { object-fit: contain; opacity: 0.6; }
+
+      /* --- Modal --- */
+      .modal {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+      }
+      .modal.is-open { display: flex; }
+      .modal-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        animation: fade-in 0.18s ease;
+      }
+      .modal-dialog {
+        position: relative;
+        background: #fff;
+        max-width: min(92vw, 760px);
+        width: 100%;
+        max-height: 92vh;
+        overflow: hidden;
+        padding: clamp(1.5rem, 3vw, 2.5rem);
+        display: flex;
+        flex-direction: column;
+        border-radius: 12px;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18),
+          0 2px 8px rgba(0, 0, 0, 0.08);
+        animation: pop-in 0.2s ease;
+      }
+      .modal-close {
+        position: absolute;
+        top: 0.25rem;
+        right: 0.5rem;
+        background: none;
+        border: 0;
+        font-family: inherit;
+        font-size: 2rem;
+        line-height: 1;
+        padding: 0.25rem 0.6rem;
+        cursor: pointer;
+        color: var(--muted);
+      }
+      .modal-close:hover { color: #000; }
+      .modal-close:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      .modal-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex: 1 1 auto;
+        min-height: 0;
+        width: 100%;
+      }
+      .modal-img-wrap {
+        width: 100%;
+        max-width: 480px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0.75rem 0;
+      }
+      .modal-img {
+        max-width: 100%;
+        max-height: 55vh;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+      }
+      .modal-text {
+        width: 100%;
+        text-align: center;
+        max-width: 60ch;
+        flex: 0 0 auto;
+      }
+      .modal-title {
+        font-style: italic;
+        font-weight: 600;
+        font-size: clamp(1.15rem, 1.6vw, 1.5rem);
+        margin: 0 0 0.5rem;
+      }
+      .modal-details {
+        font-size: 0.95rem;
+        color: var(--muted);
+        margin: 0 0 0.75rem;
+      }
+      .modal-blurb {
+        font-size: 0.95rem;
+        margin: 0 0 0.75rem;
+      }
+      .modal-found {
+        font-style: italic;
+        color: var(--muted);
+        font-size: 0.9rem;
+        margin: 0.5rem 0 0;
+      }
+      .modal-upload {
+        margin: 0.5rem 0 0;
+        text-align: center;
+        width: 100%;
+      }
+      .modal-img.is-uploadable {
+        cursor: pointer;
+        transition: opacity 0.15s ease;
+      }
+      .modal-img.is-uploadable:hover { opacity: 0.85; }
+      .modal-img.is-uploading { opacity: 0.5; cursor: wait; }
+      .upload-status {
+        font-size: 0.85rem;
+        font-style: italic;
+        color: var(--muted);
+        min-height: 1.2em;
+      }
+      .upload-status.is-error { color: #a00; }
+      .upload-status.is-success { color: #060; }
+      @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes pop-in {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      /* --- Map panel --- */
+      #map-panel { display: none; padding-bottom: 2.5%; }
+      .map-frame {
+        width: 100%;
+        aspect-ratio: 16 / 10;
+        border: 1px solid #e0e0e0;
+        background: var(--placeholder-bg);
+      }
+      .map-caption {
+        font-size: 0.9rem;
+        color: var(--muted);
+        margin: 0.75rem 0 0;
+        font-style: italic;
+      }
+      .map-setup {
+        padding: clamp(1.5rem, 4vw, 3rem);
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+      .map-setup code {
+        font-family: "Courier New", Courier, monospace;
+        background: #f4f4f1;
+        padding: 0.1em 0.3em;
+        font-size: 0.9em;
+      }
+
+      footer { padding: 2rem 0; }
+      footer p { margin: 0; font-size: 0.9rem; color: var(--muted); }
+
+      @media (max-width: 900px) {
+        #chart { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .section-overview { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+        .artwork-title { font-size: 1rem; }
+        .item h3, .blurb { font-size: 0.8rem; }
+      }
+      @media (max-width: 600px) {
+        body { padding: 0 1rem; }
+        #chart {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          column-gap: 3%;
+        }
+        .artwork { aspect-ratio: 3 / 4; }
+        .artwork-title { font-size: 0.9rem; }
+        .item h3, .blurb { font-size: 0.75rem; }
+        .section-overview {
+          grid-template-columns: repeat(6, minmax(0, 1fr));
+          column-gap: 1.5%;
+        }
+        .counter-line { font-size: 1.1rem; }
+        #title p { font-size: 0.95rem; }
+        .tab { font-size: 1.3rem; }
+      }
+      @media (max-width: 380px) {
+        .section-overview { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .filledBar,
+        .artwork,
+        .section-overview-image,
+        .tab { transition: none; }
+        .modal-backdrop, .modal-dialog { animation: none; }
+      }
+    </style>
   </head>
 
   <body>
-    <div id="title">
-      <h1>APAH 250 Hunt</h1>
-      <p>
-        My Senior year of high school, I took a class called AP Art History,
-        taught by Ms. Ellen Powers. The curriculum was structured around 250
-        works of global art history, colloquially known as 'the 250'. This class
-        left an indellible impact on me, and revealed how art history could be a
-        powerful tool in understanding culture, world history and even human
-        psychology. After discovering someone had made an (incomplete)
-        <a
-          href="https://www.google.com/maps/d/u/0/viewer?mid=16JCCln9_srXbN5XbBVhi7vmKak8&hl=en_US&ll=-3.81666561775622e-14%2C0&z=1"
-          >map of the 250,</a
-        >
-        I decided to make it a life goal to see each artwork in person. The goal
-        is not completion ( that is technically impossible.. thanks
-        <i>Stone Breakers</i> ), but about the journey. Each of the artworks you
-        see in this database has a story attached to it, and finding the
-        remaining works will surely yield better ones.
-      </p>
-      <p style="padding-bottom: 2.5%">
-        I dedicate this project to the pursuit of art, the preservation of
-        history, and the immutable strength of the human will.
-      </p>
-      <div id="counter"></div>
+    <main>
+      <header id="title">
+        <h1>APAH 250 Hunt</h1>
+        <p>
+          My Senior year of high school, I took a class called AP Art History,
+          taught by Ms. Ellen Powers. The curriculum was structured around 250
+          works of global art history, colloquially known as 'the 250'. This
+          class left an indellible impact on me, and revealed how art history
+          could be a powerful tool in understanding culture, world history and
+          even human psychology. After discovering someone had made an
+          (incomplete)
+          <a
+            href="https://www.google.com/maps/d/u/0/viewer?mid=16JCCln9_srXbN5XbBVhi7vmKak8&hl=en_US&ll=-3.81666561775622e-14%2C0&z=1"
+            >map of the 250,</a
+          >
+          I decided to make it a life goal to see each artwork in person. The
+          goal is not completion ( that is technically impossible.. thanks
+          <i>Stone Breakers</i> ), but about the journey. Each of the artworks
+          you see in this database has a story attached to it, and finding the
+          remaining works will surely yield better ones.
+        </p>
+        <p class="dedication">
+          I dedicate this project to the pursuit of art, the preservation of
+          history, and the immutable strength of the human will.
+        </p>
+        <div id="counter-wrap" aria-live="polite"></div>
+      </header>
+
+      <nav aria-label="View mode">
+        <div class="tabs" role="tablist">
+          <button
+            class="tab is-active"
+            id="tab-overview"
+            role="tab"
+            type="button"
+            aria-selected="true"
+            aria-controls="chart2"
+          >
+            Overview
+          </button>
+          <button
+            class="tab"
+            id="tab-gallery"
+            role="tab"
+            type="button"
+            aria-selected="false"
+            aria-controls="chart"
+          >
+            Gallery
+          </button>
+          <button
+            class="tab"
+            id="tab-map"
+            role="tab"
+            type="button"
+            aria-selected="false"
+            aria-controls="map-panel"
+          >
+            Map
+          </button>
+        </div>
+      </nav>
+
+      <section
+        id="chart"
+        role="tabpanel"
+        aria-labelledby="tab-gallery"
+        hidden
+      ></section>
+      <section
+        id="chart2"
+        role="tabpanel"
+        aria-labelledby="tab-overview"
+      ></section>
+      <section
+        id="map-panel"
+        role="tabpanel"
+        aria-labelledby="tab-map"
+        hidden
+      ></section>
+
+      <footer><p>by Graeme Mounsey</p></footer>
+    </main>
+
+    <div
+      class="modal"
+      id="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+      aria-hidden="true"
+    >
+      <div class="modal-backdrop" data-close></div>
+      <div class="modal-dialog">
+        <button class="modal-close" data-close aria-label="Close" type="button">
+          ×
+        </button>
+        <div class="modal-content">
+          <div class="modal-text modal-text--top">
+            <h2 class="modal-title" id="modal-title"></h2>
+            <p class="modal-details"></p>
+          </div>
+          <div class="modal-img-wrap">
+            <img class="modal-img" alt="" />
+          </div>
+          <div class="modal-text modal-text--bottom">
+            <p class="modal-blurb"></p>
+            <p class="modal-found" hidden></p>
+          </div>
+          <div class="modal-upload" hidden>
+            <input
+              class="upload-input"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/heic"
+              hidden
+            />
+            <div class="upload-status" role="status" aria-live="polite"></div>
+          </div>
+        </div>
+      </div>
     </div>
-    <div id="modes">
-      <h1 id="title1">Overview</h1>
-      <h1 id="title2">Gallery</h1>
-    </div>
-    <section id="chart"></section>
-    <section id="chart2"></section>
-    <p style="padding-bottom: 2.5%">by Graeme Mounsey</p>
+
+    <script>
+      const SPREADSHEET_ID = "1Cuc04IRdPS_3ULZJD_IH1cNcGVEbdwFYLfA4vzpvCnY";
+      const TAB_NAME = "database";
+
+      const MAP_EMBED_URL =
+        "https://www.google.com/maps/d/embed?mid=1K7axeED0oK9KDTWjqrflm8hlB45kQhQ";
+
+      // === PASTE LAMBDA FUNCTION URL HERE (for image uploads) ===
+      // Looks like: https://abc123.lambda-url.us-east-1.on.aws/
+      // Leave empty to hide the upload UI.
+      const UPLOAD_URL =
+        "https://i5r5um5ijqarv4kce3zj6e7cia0dzlqe.lambda-url.us-east-1.on.aws/";
+      // ==========================================================
+      const PASSWORD_STORAGE_KEY = "apah250-upload-pw";
+      const REMOTE_PLACEHOLDER =
+        "https://www.datocms-assets.com/105819/1693441857-0.png";
+      const PLACEHOLDER_SRC =
+        "data:image/svg+xml;utf8," +
+        encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 3" preserveAspectRatio="xMidYMid slice"><rect width="4" height="3" fill="#f4f4f1"/><text x="2" y="1.7" text-anchor="middle" font-family="Georgia,serif" font-size="0.5" fill="#bbb" font-style="italic">not yet found</text></svg>'
+        );
+
+      const isMissing = (src) => !src || src === REMOTE_PLACEHOLDER;
+      const LOCATION_KEY = "where can I find it (lead, not 100%)";
+
+      const SECTION_LABELS = [
+        "Global Prehistory, 30,000–500 BCE",
+        "Ancient Mediterranean, 3500 BCE–300 CE",
+        "Early Europe and Colonial Americas, 200–1750 CE",
+        "Later Europe and Americas, 1750–1980 CE",
+        "Indigenous Americas, 1000 BCE–1980 CE",
+        "Africa, 1100–1980 CE",
+        "West and Central Asia, 500 BCE–1980 CE",
+        "South, East, and Southeast Asia, 300 BCE–1980 CE",
+        "The Pacific, 700–1980 CE",
+        "Global Contemporary, 1980 CE to Present",
+      ];
+      const SECTION_INTERVALS = [
+        [0, 10], [11, 46], [47, 97], [98, 150], [151, 165],
+        [166, 179], [180, 190], [191, 211], [212, 222], [223, 249],
+      ];
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const counterWrap = document.getElementById("counter-wrap");
+        counterWrap.innerHTML = '<p class="loading">Loading artworks…</p>';
+
+        fetch(`https://opensheet.elk.sh/${SPREADSHEET_ID}/${TAB_NAME}`)
+          .then((res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+          })
+          .then((data) => {
+            counterWrap.innerHTML = "";
+            if (!Array.isArray(data) || data.length === 0)
+              throw new Error("Empty response");
+            renderAll(data);
+          })
+          .catch((err) => {
+            console.error("Failed to load spreadsheet:", err);
+            counterWrap.innerHTML =
+              '<p class="loading" style="color:#a00">Could not load the artwork database — open the console for details and refresh.</p>';
+          });
+
+        setupModal();
+      });
+
+      function renderAll(data) {
+        allData = data;
+        const found = data.filter((e) => !isMissing(e.src)).length;
+        const total = 250;
+        const percentage = ((found / total) * 100).toFixed(2);
+        renderCounter(found, total, percentage);
+        setupTabs();
+        renderGallery(data);
+        renderOverview(data);
+        renderMap();
+      }
+
+      function renderMap() {
+        const panel = document.getElementById("map-panel");
+        panel.innerHTML = "";
+        if (MAP_EMBED_URL && /^https?:\/\//.test(MAP_EMBED_URL)) {
+          const iframe = document.createElement("iframe");
+          iframe.className = "map-frame";
+          iframe.src = MAP_EMBED_URL;
+          iframe.loading = "lazy";
+          iframe.title = "All 250 artworks across the globe";
+          iframe.setAttribute("allowfullscreen", "");
+          iframe.referrerPolicy = "no-referrer-when-downgrade";
+          panel.appendChild(iframe);
+          const caption = document.createElement("p");
+          caption.className = "map-caption";
+          caption.textContent =
+            "Built in Google My Maps. Pan, zoom, and click a marker for details.";
+          panel.appendChild(caption);
+        } else {
+          const setup = document.createElement("div");
+          setup.className = "map-setup map-frame";
+          setup.innerHTML =
+            'No map URL set yet. Open <code>index.html</code> and paste your ' +
+            "Google My Maps embed URL into the <code>MAP_EMBED_URL</code> " +
+            "constant near the top of the <code>&lt;script&gt;</code> block.";
+          panel.appendChild(setup);
+        }
+      }
+
+      function renderCounter(found, total, percentage) {
+        const wrap = document.getElementById("counter-wrap");
+        const bar = document.createElement("div");
+        bar.className = "bar";
+        bar.setAttribute("role", "progressbar");
+        bar.setAttribute("aria-valuenow", String(found));
+        bar.setAttribute("aria-valuemin", "0");
+        bar.setAttribute("aria-valuemax", String(total));
+        bar.setAttribute("aria-label", `${found} of ${total} artworks found`);
+        const filled = document.createElement("div");
+        filled.className = "filledBar";
+        requestAnimationFrame(() => (filled.style.width = percentage + "%"));
+        bar.appendChild(filled);
+        wrap.appendChild(bar);
+
+        const line = document.createElement("div");
+        line.className = "counter-line";
+        line.innerHTML = `${found}/${total} <span class="pct">· ${percentage}%</span>`;
+        wrap.appendChild(line);
+      }
+
+      function setupTabs() {
+        const tabs = [
+          {
+            btn: document.getElementById("tab-overview"),
+            panel: document.getElementById("chart2"),
+            display: "block",
+          },
+          {
+            btn: document.getElementById("tab-gallery"),
+            panel: document.getElementById("chart"),
+            display: "grid",
+          },
+          {
+            btn: document.getElementById("tab-map"),
+            panel: document.getElementById("map-panel"),
+            display: "block",
+          },
+        ];
+
+        function activate(idx) {
+          tabs.forEach((t, i) => {
+            const active = i === idx;
+            t.btn.classList.toggle("is-active", active);
+            t.btn.setAttribute("aria-selected", String(active));
+            t.panel.hidden = !active;
+            t.panel.style.display = active ? t.display : "none";
+          });
+        }
+
+        tabs.forEach((t, i) => {
+          t.btn.addEventListener("click", () => activate(i));
+          t.btn.addEventListener("keydown", (e) => {
+            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+              e.preventDefault();
+              const dir = e.key === "ArrowRight" ? 1 : -1;
+              const next = (i + dir + tabs.length) % tabs.length;
+              activate(next);
+              tabs[next].btn.focus();
+            }
+          });
+        });
+      }
+
+      function makeImg(entry, classBase, dataIndex) {
+        const img = document.createElement("img");
+        img.className = classBase;
+        img.loading = "lazy";
+        img.decoding = "async";
+        img.alt = entry.name || `Artwork ${entry.the || ""}`;
+        if (dataIndex !== undefined) img.dataset.artworkIndex = String(dataIndex);
+        img.dataset.classBase = classBase;
+        if (isMissing(entry.src)) {
+          img.src = PLACEHOLDER_SRC;
+          img.classList.add(classBase + "--missing");
+        } else {
+          img.src = entry.src;
+          img.addEventListener("error", () => {
+            img.src = PLACEHOLDER_SRC;
+            img.classList.add(classBase + "--missing");
+          });
+        }
+        return img;
+      }
+
+      function renderGallery(data) {
+        const chart = document.getElementById("chart");
+        const frag = document.createDocumentFragment();
+        data.forEach((entry, index) => {
+          const item = document.createElement("button");
+          item.className = "item";
+          item.type = "button";
+          item.addEventListener("click", () => openModal(index, item));
+
+          const details = document.createElement("div");
+          details.className = "details";
+          const h1 = document.createElement("h1");
+          h1.className = "artwork-title";
+          const number = entry.the || index + 1;
+          h1.textContent = `${number}. ${entry.name || ""}`;
+          const h3 = document.createElement("h3");
+          h3.textContent = entry.details || "";
+          details.appendChild(h1);
+          details.appendChild(h3);
+          const img = makeImg(entry, "artwork", index);
+          const p = document.createElement("p");
+          p.className = "blurb";
+          p.textContent = entry.blurb || "";
+          item.appendChild(details);
+          item.appendChild(img);
+          item.appendChild(p);
+          frag.appendChild(item);
+        });
+        chart.appendChild(frag);
+      }
+
+      function renderOverview(data) {
+        const chart2 = document.getElementById("chart2");
+        const frag = document.createDocumentFragment();
+        SECTION_INTERVALS.forEach((interval, idx) => {
+          const h3 = document.createElement("h3");
+          h3.className = "section-overview-title";
+          h3.textContent = SECTION_LABELS[idx];
+          frag.appendChild(h3);
+          const section = document.createElement("div");
+          section.className = "section-overview";
+          for (let i = interval[0]; i <= interval[1]; i++) {
+            const entry = data[i];
+            if (!entry) continue;
+            const btn = document.createElement("button");
+            btn.className = "tile-button";
+            btn.type = "button";
+            btn.setAttribute(
+              "aria-label",
+              entry.name || `Artwork ${entry.the || i + 1}`
+            );
+            btn.appendChild(makeImg(entry, "section-overview-image", i));
+            btn.addEventListener("click", () => openModal(i, btn));
+            section.appendChild(btn);
+          }
+          frag.appendChild(section);
+        });
+        chart2.appendChild(frag);
+      }
+
+      // --- Modal ---
+      let lastFocusedTrigger = null;
+      let allData = [];
+      let currentIndex = -1;
+      let modal, modalImg, modalTitle, modalDetails, modalBlurb,
+        modalFound, modalClose, modalUpload, uploadInput, uploadStatus;
+
+      function setupModal() {
+        modal = document.getElementById("modal");
+        modalImg = modal.querySelector(".modal-img");
+        modalTitle = modal.querySelector(".modal-title");
+        modalDetails = modal.querySelector(".modal-details");
+        modalBlurb = modal.querySelector(".modal-blurb");
+        modalFound = modal.querySelector(".modal-found");
+        modalClose = modal.querySelector(".modal-close");
+        modalUpload = modal.querySelector(".modal-upload");
+        uploadInput = modal.querySelector(".upload-input");
+        uploadStatus = modal.querySelector(".upload-status");
+
+        modalImg.addEventListener("click", () => {
+          if (!modalImg.classList.contains("is-uploadable")) return;
+          if (modalImg.classList.contains("is-uploading")) return;
+          uploadInput.click();
+        });
+        modalImg.addEventListener("keydown", (e) => {
+          if (!modalImg.classList.contains("is-uploadable")) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            uploadInput.click();
+          }
+        });
+        uploadInput.addEventListener("change", handleFilePicked);
+
+        modal.addEventListener("click", (e) => {
+          if (e.target.closest("[data-close]")) closeModal();
+        });
+
+        document.addEventListener("keydown", (e) => {
+          if (!modal.classList.contains("is-open")) return;
+          if (e.key === "Escape") {
+            closeModal();
+          } else if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            navigateModal(-1);
+          } else if (e.key === "ArrowRight") {
+            e.preventDefault();
+            navigateModal(1);
+          }
+        });
+
+        // Touch swipe: left = next, right = previous
+        const dialog = modal.querySelector(".modal-dialog");
+        let touchStartX = 0;
+        let touchStartY = 0;
+        dialog.addEventListener(
+          "touchstart",
+          (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+          },
+          { passive: true }
+        );
+        dialog.addEventListener(
+          "touchend",
+          (e) => {
+            const dx = e.changedTouches[0].clientX - touchStartX;
+            const dy = e.changedTouches[0].clientY - touchStartY;
+            if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+              navigateModal(dx < 0 ? 1 : -1);
+            }
+          },
+          { passive: true }
+        );
+      }
+
+      function navigateModal(delta) {
+        const next = currentIndex + delta;
+        if (next < 0 || next >= allData.length) return;
+        openModal(next);
+      }
+
+      function setOrHide(el, text) {
+        if (text && String(text).trim()) {
+          el.textContent = text;
+          el.hidden = false;
+        } else {
+          el.hidden = true;
+        }
+      }
+
+      function openModal(index, trigger) {
+        if (index < 0 || index >= allData.length) return;
+        const wasOpen = modal.classList.contains("is-open");
+        currentIndex = index;
+        const entry = allData[index];
+        if (trigger !== undefined) lastFocusedTrigger = trigger;
+        const number = entry.the || "";
+        modalTitle.textContent = `${number}. ${entry.name || ""}`.trim();
+        setOrHide(modalDetails, entry.details);
+        setOrHide(modalBlurb, entry.blurb);
+
+        const loc = (entry[LOCATION_KEY] || "").trim();
+        const when = (entry.when || "").trim();
+        const validLoc = loc && loc.toLowerCase() !== "x";
+        let foundText = "";
+        if (when && validLoc) foundText = `Found ${when} · ${loc}`;
+        else if (when) foundText = `Found ${when}`;
+        if (foundText) {
+          modalFound.textContent = foundText;
+          modalFound.hidden = false;
+        } else {
+          modalFound.hidden = true;
+        }
+        if (isMissing(entry.src)) {
+          modalImg.src = PLACEHOLDER_SRC;
+        } else {
+          modalImg.src = entry.src;
+        }
+        modalImg.alt = entry.name || `Artwork ${number}`;
+
+        // Reset upload UI for the newly-opened entry. Clicking the
+        // placeholder image itself opens the file picker.
+        modalImg.classList.remove("is-uploading");
+        if (UPLOAD_URL && isMissing(entry.src)) {
+          modalImg.classList.add("is-uploadable");
+          modalImg.setAttribute("role", "button");
+          modalImg.setAttribute("aria-label", "Upload a photo for this artwork");
+          modalImg.setAttribute("tabindex", "0");
+          modalUpload.hidden = false;
+        } else {
+          modalImg.classList.remove("is-uploadable");
+          modalImg.removeAttribute("role");
+          modalImg.removeAttribute("aria-label");
+          modalImg.removeAttribute("tabindex");
+          modalUpload.hidden = true;
+        }
+        uploadInput.value = "";
+        setUploadStatus("", "");
+
+        modal.classList.add("is-open");
+        modal.setAttribute("aria-hidden", "false");
+        document.body.classList.add("modal-open");
+        if (!wasOpen) modalClose.focus();
+      }
+
+      function closeModal() {
+        modal.classList.remove("is-open");
+        modal.setAttribute("aria-hidden", "true");
+        document.body.classList.remove("modal-open");
+        if (lastFocusedTrigger) {
+          lastFocusedTrigger.focus();
+          lastFocusedTrigger = null;
+        }
+      }
+
+      // --- Upload ---
+      function setUploadStatus(text, kind) {
+        uploadStatus.textContent = text || "";
+        uploadStatus.className = "upload-status";
+        if (kind === "error") uploadStatus.classList.add("is-error");
+        else if (kind === "success") uploadStatus.classList.add("is-success");
+      }
+
+      function blobToBase64(blob) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = String(reader.result || "");
+            const comma = result.indexOf(",");
+            resolve(comma >= 0 ? result.slice(comma + 1) : result);
+          };
+          reader.onerror = () => reject(new Error("Failed to read file"));
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      // Resize big photos client-side and re-encode as JPEG so we stay
+      // comfortably under the Lambda Function URL 6 MB request cap.
+      function prepImage(file, maxDim = 2000, quality = 0.85) {
+        return new Promise((resolve, reject) => {
+          const url = URL.createObjectURL(file);
+          const img = new Image();
+          img.onload = () => {
+            URL.revokeObjectURL(url);
+            const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+            const w = Math.round(img.width * scale);
+            const h = Math.round(img.height * scale);
+            const canvas = document.createElement("canvas");
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, w, h);
+            canvas.toBlob(
+              (blob) =>
+                blob ? resolve(blob) : reject(new Error("Encode failed")),
+              "image/jpeg",
+              quality
+            );
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error("Couldn't decode image (HEIC files from iPhone may need converting first)"));
+          };
+          img.src = url;
+        });
+      }
+
+      async function handleFilePicked(e) {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+
+        if (!UPLOAD_URL) {
+          setUploadStatus("Upload is not configured.", "error");
+          return;
+        }
+
+        const allowed = [
+          "image/jpeg",
+          "image/png",
+          "image/webp",
+          "image/heic",
+        ];
+        if (file.type && !allowed.includes(file.type)) {
+          setUploadStatus(`Unsupported file type (${file.type})`, "error");
+          uploadInput.value = "";
+          return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          setUploadStatus("File too large (max 10MB).", "error");
+          uploadInput.value = "";
+          return;
+        }
+
+        let password = localStorage.getItem(PASSWORD_STORAGE_KEY);
+        if (!password) {
+          password = prompt("Upload password:");
+          if (!password) {
+            uploadInput.value = "";
+            return;
+          }
+          localStorage.setItem(PASSWORD_STORAGE_KEY, password);
+        }
+
+        const entry = allData[currentIndex];
+        const number = parseInt(entry.the || currentIndex + 1, 10);
+        const entryIndex = currentIndex; // capture in case user navigates
+
+        modalImg.classList.add("is-uploading");
+        setUploadStatus("Preparing image…", "");
+
+        try {
+          const blob = await prepImage(file);
+          if (blob.size > 4.5 * 1024 * 1024) {
+            setUploadStatus(
+              `Image still too large after compression (${(blob.size / 1024 / 1024).toFixed(1)} MB). Try a smaller photo.`,
+              "error"
+            );
+            return;
+          }
+          const image = await blobToBase64(blob);
+          setUploadStatus("Uploading…", "");
+
+          const res = await fetch(UPLOAD_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              password,
+              number,
+              image,
+              contentType: "image/jpeg",
+            }),
+          });
+
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok) {
+            if (res.status === 401) {
+              localStorage.removeItem(PASSWORD_STORAGE_KEY);
+              setUploadStatus("Wrong password — try again.", "error");
+            } else {
+              setUploadStatus(
+                data.error || `Upload failed (${res.status})`,
+                "error"
+              );
+            }
+            return;
+          }
+
+          const newUrl = data.url;
+          const cacheBusted =
+            newUrl + (newUrl.includes("?") ? "&" : "?") + "v=" + Date.now();
+
+          // Update in-memory data
+          allData[entryIndex].src = newUrl;
+
+          // Update modal image (only if user is still viewing this entry)
+          if (currentIndex === entryIndex) {
+            modalImg.src = cacheBusted;
+            modalImg.classList.remove("is-uploadable");
+            modalImg.removeAttribute("role");
+            modalImg.removeAttribute("aria-label");
+            modalImg.removeAttribute("tabindex");
+            modalUpload.hidden = true;
+          }
+
+          // Update every thumbnail for this artwork (Gallery + Overview)
+          document
+            .querySelectorAll(`img[data-artwork-index="${entryIndex}"]`)
+            .forEach((img) => {
+              img.src = cacheBusted;
+              const cb = img.dataset.classBase;
+              if (cb) img.classList.remove(cb + "--missing");
+            });
+
+          setUploadStatus("Uploaded — thanks!", "success");
+        } catch (err) {
+          console.error(err);
+          setUploadStatus(err.message || "Upload failed", "error");
+        } finally {
+          modalImg.classList.remove("is-uploading");
+          uploadInput.value = "";
+        }
+      }
+    </script>
   </body>
 </html>
