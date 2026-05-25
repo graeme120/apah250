@@ -21,7 +21,11 @@ const SHEET_NAME = "database";
 // Numeric sheet id for the "database" tab. The default first tab is 0.
 // If you renamed/moved the tab, override via SHEET_GID env var.
 const SHEET_GID = parseInt(process.env.SHEET_GID || "0", 10);
-const SRC_COLUMN_INDEX = 4; // E (0-indexed: the=0, name=1, details=2, blurb=3, src=4)
+// Column indices (0-based): the=0, name=1, details=2, blurb=3, src=4,
+// location=5, (empty)=6, when=7.
+const SRC_COLUMN_INDEX = 4;
+const LOCATION_COLUMN_INDEX = 5;
+const WHEN_COLUMN_INDEX = 7;
 const NUMBER_COLUMN = "A";
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -42,7 +46,8 @@ export const handler = async (event) => {
   try {
     let body = event.body;
     if (event.isBase64Encoded) body = Buffer.from(body, "base64").toString();
-    const { password, number, image, contentType } = JSON.parse(body || "{}");
+    const { password, number, image, contentType, location, when } =
+      JSON.parse(body || "{}");
 
     if (!process.env.UPLOAD_PASSWORD) {
       return json(500, { error: "Server missing UPLOAD_PASSWORD env var" });
@@ -80,8 +85,9 @@ export const handler = async (event) => {
     if (sheetRow === -1) {
       return json(404, { error: `Artwork ${num} not found in sheet` });
     }
-    // Write the URL as plain text but color the cell's text #1155cc.
-    await writeStyledSrcCell(accessToken, sheetRow, url);
+    // Write the URL into the src cell (colored #1155cc), plus location
+    // (col F) and when (col H) if the user provided them.
+    await writeUploadCells(accessToken, sheetRow, url, location, when);
 
     return json(200, { success: true, url });
   } catch (err) {
@@ -265,57 +271,80 @@ async function findRowForNumber(accessToken, num) {
   return -1;
 }
 
-// Writes the URL into the src cell as plain text AND sets the cell's text
-// color to #1155cc, all in one batchUpdate call. Uses GridRange (numeric
-// sheetId + row/column indices) which is required by updateCells.
-async function writeStyledSrcCell(accessToken, sheetRow, url) {
-  const apiUrl =
-    `https://sheets.googleapis.com/v4/spreadsheets/` +
-    `${SPREADSHEET_ID}:batchUpdate`;
-  const body = {
-    requests: [
-      {
-        updateCells: {
-          range: {
-            sheetId: SHEET_GID,
-            startRowIndex: sheetRow - 1,
-            endRowIndex: sheetRow,
-            startColumnIndex: SRC_COLUMN_INDEX,
-            endColumnIndex: SRC_COLUMN_INDEX + 1,
-          },
-          rows: [
-            {
-              values: [
-                {
-                  userEnteredValue: { stringValue: url },
-                  userEnteredFormat: {
-                    textFormat: {
-                      foregroundColor: {
-                        red: 0x11 / 255,
-                        green: 0x55 / 255,
-                        blue: 0xcc / 255,
-                      },
+// Single batchUpdate call that sets the src cell (always, with #1155cc
+// text color), plus the location (col F) and when (col H) cells if values
+// were provided.
+async function writeUploadCells(accessToken, sheetRow, url, location, when) {
+  const requests = [
+    {
+      updateCells: {
+        range: cellRange(sheetRow, SRC_COLUMN_INDEX),
+        rows: [
+          {
+            values: [
+              {
+                userEnteredValue: { stringValue: url },
+                userEnteredFormat: {
+                  textFormat: {
+                    foregroundColor: {
+                      red: 0x11 / 255,
+                      green: 0x55 / 255,
+                      blue: 0xcc / 255,
                     },
                   },
                 },
-              ],
-            },
-          ],
-          fields:
-            "userEnteredValue,userEnteredFormat.textFormat.foregroundColor",
-        },
+              },
+            ],
+          },
+        ],
+        fields:
+          "userEnteredValue,userEnteredFormat.textFormat.foregroundColor",
       },
-    ],
-  };
+    },
+  ];
+
+  const locText = typeof location === "string" ? location.trim() : "";
+  if (locText) {
+    requests.push(plainTextCellUpdate(sheetRow, LOCATION_COLUMN_INDEX, locText));
+  }
+
+  const whenText = typeof when === "string" ? when.trim() : "";
+  if (whenText) {
+    requests.push(plainTextCellUpdate(sheetRow, WHEN_COLUMN_INDEX, whenText));
+  }
+
+  const apiUrl =
+    `https://sheets.googleapis.com/v4/spreadsheets/` +
+    `${SPREADSHEET_ID}:batchUpdate`;
   const res = await fetch(apiUrl, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ requests }),
   });
   if (!res.ok) {
     throw new Error(`Sheets batchUpdate ${res.status}: ${await res.text()}`);
   }
+}
+
+function cellRange(sheetRow, colIndex) {
+  return {
+    sheetId: SHEET_GID,
+    startRowIndex: sheetRow - 1,
+    endRowIndex: sheetRow,
+    startColumnIndex: colIndex,
+    endColumnIndex: colIndex + 1,
+  };
+}
+
+function plainTextCellUpdate(sheetRow, colIndex, value) {
+  return {
+    updateCells: {
+      range: cellRange(sheetRow, colIndex),
+      rows: [{ values: [{ userEnteredValue: { stringValue: value } }] }],
+      fields: "userEnteredValue",
+    },
+  };
 }

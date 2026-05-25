@@ -36,7 +36,7 @@
 
       #title {
         padding-top: clamp(2rem, 5vw, 4rem);
-        padding-bottom: clamp(1rem, 2.5vw, 2rem);
+        padding-bottom: clamp(2rem, 5vw, 4rem);
       }
       #title h1 {
         font-size: clamp(1.75rem, 4vw, 2.75rem);
@@ -76,7 +76,7 @@
         color: var(--muted);
       }
 
-      /* --- Tabs (shaded toggle buttons) --- */
+      /* --- Tabs (outlined / shaded toggle) --- */
       .tabs {
         display: flex;
         gap: 0.5rem;
@@ -84,25 +84,27 @@
       }
       .tab {
         font-family: inherit;
-        font-size: clamp(1.1rem, 1.5vw, 1.5rem);
-        font-weight: 600;
-        background: var(--placeholder-bg);
-        border: 0;
-        padding: 0.45rem 1.1rem;
+        font-size: clamp(0.95rem, 1.25vw, 1.25rem);
+        font-weight: 400;
+        background: transparent;
+        border: 1px solid #ddd;
+        padding: 0.4rem 1rem;
         margin: 0;
         cursor: pointer;
         color: #888;
         font-style: normal;
         border-radius: 8px;
-        transition: background 0.15s ease, color 0.15s ease;
+        transition: background 0.15s ease, color 0.15s ease,
+          border-color 0.15s ease;
       }
       .tab:hover {
-        background: #e8e8e3;
         color: #555;
+        border-color: #bbb;
       }
       .tab.is-active {
-        background: var(--text-color);
-        color: #fff;
+        background: var(--placeholder-bg);
+        color: var(--text-color);
+        border-color: transparent;
       }
       .tab:focus-visible {
         outline: 2px solid var(--focus-ring);
@@ -159,7 +161,11 @@
         object-fit: cover;
         transition: opacity 0.15s ease;
       }
-      .artwork--missing { object-fit: contain; opacity: 0.85; }
+      .artwork--missing {
+        object-fit: contain;
+        background: transparent;
+        border: 1px solid #e0e0e0;
+      }
       .blurb {
         font-size: clamp(0.8rem, 0.85vw, 0.95rem);
         width: 100%;
@@ -205,7 +211,11 @@
         overflow: hidden;
         transition: opacity 0.15s ease;
       }
-      .section-overview-image--missing { object-fit: contain; opacity: 0.6; }
+      .section-overview-image--missing {
+        object-fit: contain;
+        background: transparent;
+        border: 1px solid #e0e0e0;
+      }
 
       /* --- Modal --- */
       .modal {
@@ -282,6 +292,12 @@
         height: auto;
         object-fit: contain;
       }
+      /* Empty/transparent placeholder slot — same sizing rules as a real
+         photo (max-width/height + width:auto), just with a 1px outline. */
+      .modal-img[src^="data:image/svg"] {
+        border: 1px solid #e0e0e0;
+        background: transparent;
+      }
       .modal-text {
         width: 100%;
         text-align: center;
@@ -292,16 +308,20 @@
         font-style: italic;
         font-weight: 600;
         font-size: clamp(1.15rem, 1.6vw, 1.5rem);
-        margin: 0 0 0.5rem;
+        margin: 0 0 0.25rem;
+        line-height: 1.2;
+        text-wrap: balance;
       }
       .modal-details {
         font-size: 0.95rem;
         color: var(--muted);
         margin: 0 0 0.75rem;
+        text-wrap: balance;
       }
       .modal-blurb {
         font-size: 0.95rem;
         margin: 0 0 0.75rem;
+        text-wrap: pretty;
       }
       .modal-found {
         font-style: italic;
@@ -332,6 +352,23 @@
       @keyframes pop-in {
         from { opacity: 0; transform: translateY(8px); }
         to { opacity: 1; transform: translateY(0); }
+      }
+
+      /* Skeleton pulse while a real artwork image is fetching. */
+      @keyframes loading-pulse {
+        0%, 100% { background-color: #d8d8d4; }
+        50% { background-color: #efefec; }
+      }
+      img.is-loading {
+        animation: loading-pulse 1.4s ease-in-out infinite;
+        background-color: #d8d8d4;
+        color: transparent; /* hide alt-text fallback while loading */
+      }
+      /* Modal image has no fixed CSS dimensions, so during loading we
+         pin it to a 3:4 box so the pulse has something visible to fill. */
+      .modal-img.is-loading {
+        width: 100%;
+        aspect-ratio: 3 / 4;
       }
 
       /* --- Map panel --- */
@@ -384,7 +421,7 @@
         }
         .counter-line { font-size: 1.1rem; }
         #title p { font-size: 0.95rem; }
-        .tab { font-size: 1.3rem; }
+        .tab { font-size: 1rem; }
       }
       @media (max-width: 380px) {
         .section-overview { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -394,7 +431,7 @@
         .artwork,
         .section-overview-image,
         .tab { transition: none; }
-        .modal-backdrop, .modal-dialog { animation: none; }
+        .modal-backdrop, .modal-dialog, img.is-loading { animation: none; }
       }
     </style>
   </head>
@@ -538,11 +575,24 @@
       const PASSWORD_STORAGE_KEY = "apah250-upload-pw";
       const REMOTE_PLACEHOLDER =
         "https://www.datocms-assets.com/105819/1693441857-0.png";
-      const PLACEHOLDER_SRC =
-        "data:image/svg+xml;utf8," +
-        encodeURIComponent(
-          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 3" preserveAspectRatio="xMidYMid slice"><rect width="4" height="3" fill="#f4f4f1"/><text x="2" y="1.7" text-anchor="middle" font-family="Georgia,serif" font-size="0.5" fill="#bbb" font-style="italic">not yet found</text></svg>'
+      // Portrait 3:4 SVG matching the artwork tile aspect ratio.
+      // Empty/transparent background (with a CSS border applied around it)
+      // so it reads as an "open slot" rather than a filled placeholder.
+      function makePlaceholder(text) {
+        const safe = String(text || "").replace(/[<>&]/g, "");
+        // Explicit 300x400 intrinsic size (3:4 portrait) so img elements
+        // size the placeholder the same way they'd size a real photo.
+        return (
+          "data:image/svg+xml;utf8," +
+          encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400" viewBox="0 0 3 4" preserveAspectRatio="xMidYMid meet">' +
+              '<text x="1.5" y="2.15" text-anchor="middle" font-family="Georgia,serif" font-size="0.32" fill="#aaa" font-style="italic">' +
+              safe +
+              "</text></svg>"
+          )
         );
+      }
+      const PLACEHOLDER_SRC = makePlaceholder("Not yet found");
 
       const isMissing = (src) => !src || src === REMOTE_PLACEHOLDER;
       const LOCATION_KEY = "where can I find it (lead, not 100%)";
@@ -704,11 +754,15 @@
           img.src = PLACEHOLDER_SRC;
           img.classList.add(classBase + "--missing");
         } else {
-          img.src = entry.src;
+          // Pulse while loading, drop the class once the image is decoded.
+          img.classList.add("is-loading");
+          img.addEventListener("load", () => img.classList.remove("is-loading"));
           img.addEventListener("error", () => {
+            img.classList.remove("is-loading");
             img.src = PLACEHOLDER_SRC;
             img.classList.add(classBase + "--missing");
           });
+          img.src = entry.src;
         }
         return img;
       }
@@ -735,7 +789,7 @@
           const img = makeImg(entry, "artwork", index);
           const p = document.createElement("p");
           p.className = "blurb";
-          p.textContent = entry.blurb || "";
+          p.textContent = publicBlurb(entry.blurb);
           item.appendChild(details);
           item.appendChild(img);
           item.appendChild(p);
@@ -804,6 +858,13 @@
             uploadInput.click();
           }
         });
+        // Drop the pulse animation once the real photo has decoded.
+        modalImg.addEventListener("load", () =>
+          modalImg.classList.remove("is-loading")
+        );
+        modalImg.addEventListener("error", () =>
+          modalImg.classList.remove("is-loading")
+        );
         uploadInput.addEventListener("change", handleFilePicked);
 
         modal.addEventListener("click", (e) => {
@@ -863,17 +924,7 @@
         }
       }
 
-      function openModal(index, trigger) {
-        if (index < 0 || index >= allData.length) return;
-        const wasOpen = modal.classList.contains("is-open");
-        currentIndex = index;
-        const entry = allData[index];
-        if (trigger !== undefined) lastFocusedTrigger = trigger;
-        const number = entry.the || "";
-        modalTitle.textContent = `${number}. ${entry.name || ""}`.trim();
-        setOrHide(modalDetails, entry.details);
-        setOrHide(modalBlurb, entry.blurb);
-
+      function renderFoundLine(entry) {
         const loc = (entry[LOCATION_KEY] || "").trim();
         const when = (entry.when || "").trim();
         const validLoc = loc && loc.toLowerCase() !== "x";
@@ -886,9 +937,31 @@
         } else {
           modalFound.hidden = true;
         }
+      }
+
+      // Blurbs starting with "*" are private commentary and shouldn't render.
+      function publicBlurb(blurb) {
+        const t = String(blurb || "").trim();
+        return !t || t.startsWith("*") ? "" : t;
+      }
+
+      function openModal(index, trigger) {
+        if (index < 0 || index >= allData.length) return;
+        const wasOpen = modal.classList.contains("is-open");
+        currentIndex = index;
+        const entry = allData[index];
+        if (trigger !== undefined) lastFocusedTrigger = trigger;
+        const number = entry.the || "";
+        modalTitle.textContent = `${number}. ${entry.name || ""}`.trim();
+        setOrHide(modalDetails, entry.details);
+        setOrHide(modalBlurb, publicBlurb(entry.blurb));
+
+        renderFoundLine(entry);
+        modalImg.classList.remove("is-loading");
         if (isMissing(entry.src)) {
           modalImg.src = PLACEHOLDER_SRC;
         } else {
+          modalImg.classList.add("is-loading");
           modalImg.src = entry.src;
         }
         modalImg.alt = entry.name || `Artwork ${number}`;
@@ -1017,10 +1090,39 @@
         }
 
         const entry = allData[currentIndex];
+
+        // Ask for location + date so they land in the sheet too.
+        // Pre-fill the existing values; user can edit or leave blank to skip.
+        const curLoc = (entry[LOCATION_KEY] || "").trim();
+        const locDefault = curLoc.toLowerCase() === "x" ? "" : curLoc;
+        const location = prompt(
+          "Where was it found? (leave blank to skip)",
+          locDefault
+        );
+        if (location === null) {
+          uploadInput.value = "";
+          return;
+        }
+
+        const curWhen = (entry.when || "").trim();
+        const when = prompt(
+          "When was it found? e.g. September 2024 (leave blank to skip)",
+          curWhen
+        );
+        if (when === null) {
+          uploadInput.value = "";
+          return;
+        }
+
         const number = parseInt(entry.the || currentIndex + 1, 10);
         const entryIndex = currentIndex; // capture in case user navigates
 
         modalImg.classList.add("is-uploading");
+        // Swap placeholder text from "not yet found" → "uploading…" so the
+        // image slot itself shows progress, not just the status line.
+        if (currentIndex === entryIndex && isMissing(allData[entryIndex].src)) {
+          modalImg.src = makePlaceholder("uploading…");
+        }
         setUploadStatus("Preparing image…", "");
 
         try {
@@ -1030,6 +1132,7 @@
               `Image still too large after compression (${(blob.size / 1024 / 1024).toFixed(1)} MB). Try a smaller photo.`,
               "error"
             );
+            if (currentIndex === entryIndex) modalImg.src = PLACEHOLDER_SRC;
             return;
           }
           const image = await blobToBase64(blob);
@@ -1043,6 +1146,8 @@
               number,
               image,
               contentType: "image/jpeg",
+              location: location.trim(),
+              when: when.trim(),
             }),
           });
 
@@ -1058,6 +1163,7 @@
                 "error"
               );
             }
+            if (currentIndex === entryIndex) modalImg.src = PLACEHOLDER_SRC;
             return;
           }
 
@@ -1067,15 +1173,23 @@
 
           // Update in-memory data
           allData[entryIndex].src = newUrl;
+          if (location && location.trim()) {
+            allData[entryIndex][LOCATION_KEY] = location.trim();
+          }
+          if (when && when.trim()) {
+            allData[entryIndex].when = when.trim();
+          }
 
-          // Update modal image (only if user is still viewing this entry)
+          // Update modal image + Found line (only if user is still viewing this entry)
           if (currentIndex === entryIndex) {
+            modalImg.classList.add("is-loading");
             modalImg.src = cacheBusted;
             modalImg.classList.remove("is-uploadable");
             modalImg.removeAttribute("role");
             modalImg.removeAttribute("aria-label");
             modalImg.removeAttribute("tabindex");
             modalUpload.hidden = true;
+            renderFoundLine(allData[entryIndex]);
           }
 
           // Update every thumbnail for this artwork (Gallery + Overview)
@@ -1091,6 +1205,7 @@
         } catch (err) {
           console.error(err);
           setUploadStatus(err.message || "Upload failed", "error");
+          if (currentIndex === entryIndex) modalImg.src = PLACEHOLDER_SRC;
         } finally {
           modalImg.classList.remove("is-uploading");
           uploadInput.value = "";
